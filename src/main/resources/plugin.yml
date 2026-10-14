@@ -1,0 +1,21 @@
+name: Advancium
+version: '1.0.0'
+main: si.mintymc.advancium.Advancium
+api-version: '26.3'
+author: MintyMC
+website: https://github.com/Sanowo0390/Advancium
+description: 実績解除率・サーバー別統合ランキング・Discord Webhookランキング
+softdepend: [PlaceholderAPI]
+libraries:
+  - org.xerial:sqlite-jdbc:3.50.3.0
+  - org.mariadb.jdbc:mariadb-java-client:3.5.10
+commands:
+  adv:
+    description: 実績達成率とランキング
+    usage: /adv [プレイヤー|top [ページ]|reload|sync]
+    permission: advancium.use
+permissions:
+  advancium.use:
+    default: true
+  advancium.admin:
+    default: op

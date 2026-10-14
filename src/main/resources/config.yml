@@ -1,0 +1,48 @@
+# Minecraft 26.3 / Paper・Purpur
+# minecraft名前空間の表示可能な進捗だけを標準で集計します。
+# 進捗数はサーバーから自動取得（固定の126個には依存しません）。
+advancements:
+  include-custom: false
+  # recipesなどの非表示データ進捗を除くため、displayのないものは集計しません。
+  only-with-display: true
+  # trueなら進捗の取り消し（revoke）も定期的に整合します。
+
+# 複数バックエンドではサーバーごとに異なるIDが必要。
+# 例: survival / resource / city
+server-id: survival
+
+storage:
+  # sqlite: 単独サーバー向け / mariadb: 複数バックエンドで共有する場合に推奨
+  type: sqlite
+  sqlite-file: players.sqlite3
+  mariadb:
+    host: 127.0.0.1
+    port: 3306
+    database: minty_advancements
+    username: minty_advancements
+    password: 'CHANGE_ME'
+
+messages:
+  # プレイヤーの実績解除後、解除数・割合をチャットに表示（Discordへの個別通知は行わない）。
+  advancement-progress: true
+  prefix: '&a[Advancium] &f'
+
+ranking:
+  top-size: 10
+  # 全データ再読込/他バックエンドの更新反映までの間隔（秒）
+  refresh-seconds: 60
+  # オンライン進捗の強制再同期（秒）
+  resync-seconds: 300
+
+webhook:
+  enabled: false
+  # URLは外部に公開しないでください。
+  url: ''
+  # mariadbを複数サーバーで共有する場合、有効化は一台だけにする。
+  # 実績解除が続いても一定期間まとめて更新します。
+  min-update-seconds: 30
+  periodic-seconds: 300
+  top-size: 10
+  title: '🏆 MintyMC 実績ランキング'
+  footer: 'Minecraft Java 26.3'
+  color: 5763719
