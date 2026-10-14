@@ -1,112 +1,129 @@
-# Advancium 1.0.0 — Minecraft Java 26.3
+# Advancium
 
-MintyMC向けのPaper / Purpur実績管理プラグインです。**DiscordSRVの実績解除通知はそのまま**使用し、このプラグインからDiscordに個別の実績解除通知は送信しません。
+**Advancium** は、Minecraft Java Edition の進捗（実績）を集計し、達成率やランキングを表示する Paper / Purpur 向けプラグインです。Discord Webhook を使ったランキングの自動更新にも対応しています。
 
-> **検証状況:** 現時点ではPaper/Purpur 26.3実機での起動・動作は未検証です。正式なビルドはJava 25＋Gradleの環境、またはGitHub Actionsで実行してください。テスト用サーバーで検証する前に本番環境へ導入しないでください。
+## 主な機能
 
-## 機能
+- プレイヤー別の**解除数・達成率・順位**を表示
+- 進捗解除時に、本人へ現在の達成率をチャット通知
+- ゲーム内ランキング（`/adv top`）
+- **Discord Webhook ランキング**：同じメッセージを自動編集して更新
+- PlaceholderAPI 対応
+- 保存済みのオフラインプレイヤーの進捗を取り込み
+- SQLite / MariaDB 対応。複数バックエンドのランキングも統合可能
+- サーバーに登録された進捗から集計対象の総数を自動取得
 
-- Minecraft 26.3が読み込んだ進捗を走査して総数を自動計算（デフォルトは`minecraft`名前空間＋表示あり）。レシピの解放を除外し、隠し進捗は表示がある限り含めます。
-- 進捗達成時にプレイヤー本人へ **現在の解除数 / 全実績数（%）** をチャット表示。
-- `/adv` — 自分の達成状況。
-- `/adv <プレイヤー名>` — 指定プレイヤーの状況。
-- `/adv top [ページ]` — 実績解除ランキング。
-- `/adv reload` — 設定・対象実績の再読込（管理者）。
-- `/adv sync` — オフラインファイルの再インポート（管理者）。
-- PlaceholderAPI: `%advancium_done%`、`%advancium_total%`、`%advancium_percent%`、`%advancium_rank%`。
-- `world/players/advancements/<uuid>.json`を起動時に読み込み。旧`world/advancements/`にも対応。
-- SQLiteまたはMariaDBに保存。ランキングは同じUUID・進捗IDの重複を排除。
-- Discord WebhookにランキングTOP10などをEmbedで投稿。保存したメッセージIDを使い、**以降は既存のメッセージをPATCH編集**。
-- DB処理やHTTP通信は専用I/Oスレッドで行い、Minecraftのメインスレッドをブロックしません。
+※ Discord への個別の実績解除通知は行いません。必要な場合は DiscordSRV などを利用してください。
 
-## インストール（単独バックエンド）
+## 動作環境
 
-1. **PaperまたはPurpur 26.3** を使用してください。Java 25が必要です。
-2. GitHub Actionsのビルド成功時に生成される正式な`Advancium-1.0.0.jar`を対象サーバーの`plugins/`に入れ、サーバーを起動します。Paperの`plugin.yml`ライブラリ取得でSQLite JDBCとMariaDB JDBCの2つを初回取得します（初回起動時にMavenへの通信が必要）。
-3. `plugins/Advancium/config.yml`が生成されます。`server-id`をバックエンドごとの固有IDにします。単独バックエンドなら`storage.type: sqlite`のままで使えます。
-4. Discordの「チャンネル設定 → 連携サービス → ウェブフック」からURLを取得し、設定ファイルに記入、`webhook.enabled: true`にします。
-5. サーバーを再起動し、`/adv`・`/adv top`・DiscordのEmbedを確認します。
+| 項目 | 要件 |
+| --- | --- |
+| Minecraft | Java Edition 26.3 |
+| サーバー | Paper / Purpur |
+| Java | 25 |
+| PlaceholderAPI | 任意（プレースホルダーを使う場合） |
+| データベース | SQLite（標準）または MariaDB |
 
-`plugins/Advancium/webhook-message-id.txt`にメッセージIDが記録されます。**このファイルを消すと新しいランキング投稿が作られます**。Webhook URLは秘密情報なので公開しないでください。
+> **動作確認状況：** GitHub Actions での Java 25 ビルドは成功していますが、Paper / Purpur 実機での起動・動作確認は未実施です。導入前にテストサーバーで確認してください。
 
-## 複数のPurpurバックエンド（Velocity配下）
+## インストール
 
-複数サーバーでの共有ランキングには`storage.type: mariadb`を指定し、**全バックエンドのDB接続先を同一**にしてください。各バックエンドで`server-id`を`survival`、`resource`など別々にします。
+1. [GitHub Actions](../../actions/workflows/build.yml) の成功したビルドから `Advancium-jar` を取得し、ZIP 内の JAR を `plugins/` に配置します。
+2. サーバーを起動して `plugins/Advancium/config.yml` を生成します。初回起動時は JDBC ライブラリの取得のためインターネット接続が必要です。
+3. 必要に応じてデータベースと Discord Webhook を設定します。
+4. サーバーを再起動し、`/adv` と `/adv top` で集計結果を確認します。
 
-例えばMariaDBで（パスワードは必ず変更）:
+単独バックエンドでは初期設定の **SQLite** をそのまま利用できます。
 
-```sql
-CREATE DATABASE minty_advancements CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'minty_advancements'@'10.20.30.%' IDENTIFIED BY 'STRONG_RANDOM_PASSWORD';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX ON minty_advancements.* TO 'minty_advancements'@'10.20.30.%';
+## コマンド
+
+| コマンド | 説明 | 権限 |
+| --- | --- | --- |
+| `/adv` | 自分の解除数・達成率・順位を確認 | `advancium.use` |
+| `/adv <プレイヤー名>` | 指定プレイヤーの進捗を確認 | `advancium.use` |
+| `/adv top [ページ]` | ランキングを表示 | `advancium.use` |
+| `/adv reload` | 設定と集計対象の進捗を再読み込み | `advancium.admin` |
+| `/adv sync` | 保存済み進捗を再取り込み | `advancium.admin` |
+
+`advancium.use` は全員、`advancium.admin` は OP にデフォルトで付与されます。
+
+### PlaceholderAPI
+
+| プレースホルダー | 内容 |
+| --- | --- |
+| `%advancium_done%` | 解除済み進捗数 |
+| `%advancium_total%` | 集計対象の総数 |
+| `%advancium_percent%` | 達成率（%付き） |
+| `%advancium_rank%` | ランキング順位 |
+
+## 設定
+
+設定ファイル：`plugins/Advancium/config.yml`
+
+全設定項目は [config.yml](src/main/resources/config.yml) を参照してください。
+
+### Discord Webhook
+
+```yaml
+webhook:
+  enabled: true
+  url: 'https://discord.com/api/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN'
+  min-update-seconds: 30
+  periodic-seconds: 300
+  top-size: 10
+  title: '🏆 MintyMC 実績ランキング'
 ```
 
-IP/ネットワークは実際のDB到達元に合わせてください。例の`10.20.30.%`は環境に応じて制限してから使います。**DBをインターネットに公開しないでください**。
+Discord のチャンネル設定から Webhook URL を作成して設定します。初回はランキングを投稿し、以降は**投稿済みのメッセージを編集**します。
+
+- 更新は短時間に何度も送らず、まとめて処理します。
+- 投稿先メッセージの ID は `plugins/Advancium/webhook-message-id.txt` に保存されます。
+- **Webhook URL は秘密情報です。** 設定済みの `config.yml` を公開リポジトリにコミットしないでください。
+
+### 複数バックエンドでランキングを共有する場合
+
+Velocity 配下などで複数の Paper / Purpur サーバーを運用する場合は、全バックエンドで**同じ MariaDB** を使用し、`server-id` はサーバーごとに変えてください。
 
 ```yaml
 server-id: survival
+
 storage:
   type: mariadb
   mariadb:
-    host: 10.20.30.100
+    host: 127.0.0.1
     port: 3306
     database: minty_advancements
     username: minty_advancements
-    password: 'STRONG_RANDOM_PASSWORD'
+    password: 'CHANGE_ME'
 ```
 
-各プレイヤーの進捗は**(server-id, UUID, 実績キー)**として保存されます。ランキングでは各UUIDが解除した**実績キーの集合（UNION）**を数え、例えば同じ`minecraft:story/mine_stone`を2サーバーで解除していても1つとして数えます。
+- 例えば別バックエンドでは `server-id: resource` を指定します。
+- 同じ UUID が同じ進捗を複数サーバーで解除しても、ランキングでは **1件**として数えます。
+- Discord Webhook の投稿は**1台のバックエンドだけ**で有効にしてください。
+- 全バックエンドで Minecraft のバージョンと集計設定を揃えてください。
+- MariaDB をインターネットへ直接公開しないでください。
 
-`webhook.enabled: true`は**ランキング投稿を担当するサーバー1台だけ**で設定してください。他のサーバーのWebhook機能は`false`。MariaDBを共有しない各SQLiteデータを自動合算することはできません。
+## 進捗の集計ルール
 
-> 注意: 複数バックエンド間で「未解除に戻した」実績も厳密に同期したい場合、他サーバーに残っている解除済み状態との和集合となるため、そのサーバー側の記録が残ります。「どこかのバックエンドで達成したことがある実績」を記録する設計です。
+達成率は `解除済み進捗数 ÷ 対象進捗数 × 100` で計算し、小数点第2位まで表示します。
 
-## 設定と計算ルール
+デフォルトでは `minecraft` 名前空間のうち、表示情報のある進捗だけを集計します。レシピ解放などは対象外です。データパック等の進捗も含めたい場合は `advancements.include-custom` を変更してください。実績総数は固定値ではなく、起動中のサーバーが認識している進捗から取得します。
 
-`advancements.include-custom: false`なら`minecraft`名前空間に絞り、`only-with-display: true`なら表示設定のある進捗だけを集計します（非表示のレシピ解放を除くため）。隠し進捗も表示情報があれば含みます。進捗数は起動したサーバーの登録一覧に基づき、ソースに126などの数字を固定していません。**全バックエンドで同じMinecraftバージョンと集計設定にする必要があります**。
+保存済みの進捗は起動時に取り込み、オンラインプレイヤーの進捗も定期的に同期します。複数バックエンドでは、それぞれで達成した進捗の**和集合**がランキングに反映されます。
 
-解除率の計算: `解除済み進捗数 ÷ 対象進捗数 × 100`（小数点2桁）。
+## ビルド
 
-- ゲーム内の更新: 解除後約1秒、連続解除時はまとめて表示。
-- Webhookの更新: 解除後約30秒以内のまとめ処理を基本とし、最短更新間隔で制限。さらに5分に1度同期。
-- ランキング再集計: 標準60秒ごと（解除後にも更新）。
-- オンライン進捗全件同期: 標準300秒ごと。`/adv sync`で再取込。
-- オフラインプレイヤー名: サーバーの`usercache.json`から復元。記録がなければUUIDの先頭8文字で表示し、本人の参加後に名前を更新します。
-- 進捗が取り消されると、そのバックエンドの次回スナップショット保存時に反映します。
-
-`/adv reload`は表示・実績対象などを再読込します。**DB接続先、server-idおよび定期タイマー間隔の変更は再起動が必要**です。
-
-## ソースからの正式ビルド
-
-JDK 25とGradleを用意したうえで:
+JDK 25 と Gradle を使用します。
 
 ```bash
 gradle clean build
 ```
 
-出力: `build/libs/Advancium-1.0.0.jar`（さらに`-sources.jar`も生成）。依存するPaper API (`26.3.build.178-stable`) と PlaceholderAPI API (`2.11.7`) はビルド時のみ取得し、配布JARには含めません。JDBCドライバーはPaperの`plugin.yml` `libraries`機能でサーバー起動時に取得します。
+出力先：`build/libs/`
 
-## 権限
+GitHub Actions でも `main` ブランチへの push 時にビルドされ、成功すると Artifacts に JAR がアップロードされます。
 
-- `advancium.use`: 一般プレイヤー向け（デフォルトtrue）。
-- `advancium.admin`: `reload`/`sync`（デフォルトOP）。
+## ライセンス
 
-## 制限事項
-
-- ソースコードは**Paper 26.3実機試験済みではありません**。本番利用の前にテスト環境で動作を確認してください。
-- Java版進捗APIを使用するため、Bedrockプレイヤーの扱いはGeyser/Floodgate環境で個別の検証が必要です。
-- データパックにより進捗構成が変わった場合は`/adv reload`で集計対象を再取得してください。
-- オフラインファイルの内容は、初回起動時に読み込まれるワールドの進捗に依存します。異なるバックエンドのデータはMariaDB共有で統合します。
-
-## GitHub Actionsでのビルド
-
-`main`にコードをpushすると`.github/workflows/build.yml`がGradleビルドを試行します。成功時にActionsのArtifactsから`Advancium-jar`を取得できます。**CIビルド成功は実サーバーでの動作確認を保証しません。**
-
-## 名称
-
-- プラグイン名: `Advancium`
-- メインクラス: `si.mintymc.advancium.Advancium`
-- PlaceholderAPI: `%advancium_done%`, `%advancium_total%`, `%advancium_percent%`, `%advancium_rank%`
-- 権限: `advancium.use` / `advancium.admin`
-
-旧名 `MintyAdvancements` から名称を変更したため、旧ディレクトリの設定やSQLiteデータは自動移行されません。既存インストールがあれば新しい `plugins/Advancium/` への移行が必要です。
+ライセンスは現在設定されていません。
