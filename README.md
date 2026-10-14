@@ -29,7 +29,7 @@
 
 ## インストール
 
-1. [GitHub Actions](../../actions/workflows/build.yml) の成功したビルドから `Advancium-jar` を取得し、ZIP 内の JAR を `plugins/` に配置します。
+1. [GitHub Actions](https://github.com/Sanowo0390/Advancium/actions/workflows/build.yml) の成功したビルドから `Advancium-jar` を取得し、ZIP 内の JAR を `plugins/` に配置します。
 2. サーバーを起動して `plugins/Advancium/config.yml` を生成します。初回起動時は JDBC ライブラリの取得のためインターネット接続が必要です。
 3. 必要に応じてデータベースと Discord Webhook を設定します。
 4. サーバーを再起動し、`/adv` と `/adv top` で集計結果を確認します。
@@ -124,6 +124,3 @@ gradle clean build
 
 GitHub Actions でも `main` ブランチへの push 時にビルドされ、成功すると Artifacts に JAR がアップロードされます。
 
-## ライセンス
-
-ライセンスは現在設定されていません。
