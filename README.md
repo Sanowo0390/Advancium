@@ -5,7 +5,7 @@
 ## 主な機能
 
 - プレイヤー別の**解除数・達成率・順位**を表示
-- 進捗解除時に、本人へ現在の達成率をチャット通知
+- 進捗解除時に現在の達成率をチャット通知（全員／本人のみを設定可能）
 - ゲーム内ランキング（`/adv top`）
 - **Discord Webhook ランキング**：同じメッセージを自動編集して更新
 - PlaceholderAPI 対応
@@ -62,6 +62,21 @@
 設定ファイル：`plugins/Advancium/config.yml`
 
 全設定項目は [config.yml](src/main/resources/config.yml) を参照してください。
+
+### 進捗解除時の通知
+
+```yaml
+messages:
+  advancement-progress: true
+  advancement-progress-broadcast: true
+  prefix: '&a[Advancium] &f'
+```
+
+- `advancement-progress: true`：進捗解除時に解除数と達成率を通知します。`false` で通知を無効にします。
+- `advancement-progress-broadcast: true`：**同じバックエンドのオンラインプレイヤー全員**（解除した本人を含む）にプレイヤー名付きで通知します。
+- `advancement-progress-broadcast: false`：解除した本人だけに通知します。
+
+短時間に複数の進捗を解除した場合は、達成率の通知をまとめて表示します。既存の `config.yml` にこの項目がない場合、デフォルトは `true` です。表示範囲を変更するには項目を追記し、`/adv reload` を実行してください。
 
 ### Discord Webhook
 

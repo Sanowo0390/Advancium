@@ -23,8 +23,11 @@ storage:
     password: 'CHANGE_ME'
 
 messages:
-  # プレイヤーの実績解除後、解除数・割合をチャットに表示（Discordへの個別通知は行わない）。
+  # 実績解除時に解除数・達成率をチャットに表示する。
   advancement-progress: true
+  # true: 同じバックエンドのオンラインプレイヤー全員 / false: 解除した本人のみ
+  advancement-progress-broadcast: true
+  # Discordへの個別通知は行いません。
   prefix: '&a[Advancium] &f'
 
 ranking:

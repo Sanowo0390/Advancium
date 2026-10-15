@@ -29,6 +29,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         return thread;
     });
     private final Set<UUID> scheduledPlayers = new HashSet<>(); // server main thread only
+    private final Set<UUID> pendingProgressAnnouncements = new HashSet<>(); // server main thread only
     private final AtomicBoolean boardScheduled = new AtomicBoolean(false);
     private final AtomicBoolean refreshScheduled = new AtomicBoolean(false);
     private volatile List<Advancement> advancements = List.of(); // only access Bukkit objects on main thread
@@ -155,14 +156,23 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
 
     private void schedulePlayerSync(Player player, boolean announce) {
         UUID id = player.getUniqueId();
+        // Retain an advancement announcement even if a join/periodic sync was already scheduled.
+        if (announce) pendingProgressAnnouncements.add(id);
         if (!scheduledPlayers.add(id)) return;
         Bukkit.getScheduler().runTaskLater(this, () -> {
             scheduledPlayers.remove(id);
+            boolean shouldAnnounce = pendingProgressAnnouncements.remove(id);
             if (!player.isOnline()) return;
             Set<String> keys = currentKeys(player);
-            if (announce && getConfig().getBoolean("messages.advancement-progress", true)) {
-                player.sendMessage(prefix + "進捗達成率: " + ChatColor.AQUA + keys.size() + ChatColor.GRAY + "/" + total()
-                        + ChatColor.YELLOW + " (" + percent(keys.size()) + "%)");
+            if (shouldAnnounce && getConfig().getBoolean("messages.advancement-progress", true)) {
+                String progress = ChatColor.AQUA + String.valueOf(keys.size()) + ChatColor.GRAY + "/" + total()
+                        + ChatColor.YELLOW + " (" + percent(keys.size()) + "%)";
+                if (getConfig().getBoolean("messages.advancement-progress-broadcast", true)) {
+                    String message = prefix + ChatColor.GREEN + player.getName() + ChatColor.WHITE + " の進捗達成率: " + progress;
+                    for (Player recipient : Bukkit.getOnlinePlayers()) recipient.sendMessage(message);
+                } else {
+                    player.sendMessage(prefix + "進捗達成率: " + progress);
+                }
             }
             sendSnapshot(id, player.getName(), keys);
         }, 20L);
