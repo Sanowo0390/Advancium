@@ -1,7 +1,7 @@
 # Advancium
 
 **Advancium** は、Minecraft Java Edition の進捗（実績）を集計し、達成率やランキングを表示する Paper / Purpur 向けプラグインです。Discord Webhook を使ったランキングの自動更新にも対応しています。
-
+### ⚠️このプラグインはAIのみで作られました⚠️
 ## 主な機能
 
 - プレイヤー別の**解除数・達成率・順位**を表示
