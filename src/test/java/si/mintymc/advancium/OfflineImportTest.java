@@ -185,11 +185,12 @@ class OfflineImportTest {
         Path base = Files.createDirectories(temp.resolve("server"));
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
-        Files.writeString(base.resolve("whitelist.json"),
-                "[{\\"uuid\\":\\"" + first + "\\",\\"name\\":\\"WhitelistPlayer\\"}]");
-        Files.writeString(base.resolve("usercache.json"),
-                "[{\\"uuid\\":\\"" + first + "\\",\\"name\\":\\"CurrentName\\"},"
-                + "{\\"uuid\\":\\"" + second + "\\",\\"name\\":\\"OldPlayer\\"}]");
+        Files.writeString(base.resolve("whitelist.json"), """
+                [{"uuid":"%s","name":"WhitelistPlayer"}]
+                """.formatted(first));
+        Files.writeString(base.resolve("usercache.json"), """
+                [{"uuid":"%s","name":"CurrentName"},{"uuid":"%s","name":"OldPlayer"}]
+                """.formatted(first, second));
         Map<UUID, String> names = ProgressStore.loadNameCache(base);
         assertEquals("CurrentName", names.get(first));
         assertEquals("OldPlayer", names.get(second));
