@@ -1,5 +1,5 @@
 name: Advancium
-version: '1.0.2'
+version: '1.0.3'
 main: si.mintymc.advancium.Advancium
 api-version: '26.2'
 author: MintyMC
@@ -12,7 +12,11 @@ libraries:
 commands:
   adv:
     description: 実績達成率とランキング
-    usage: /adv [プレイヤー|top [ページ]|reload|sync]
+    usage: /adv [プレイヤー|top [ページ]|reload|sync|import|refresh]
+    permission: advancium.use
+  advtop:
+    description: オンライン・オフラインを含む実績達成率ランキング
+    usage: /advtop [ページ|import|refresh]
     permission: advancium.use
 permissions:
   advancium.use:
