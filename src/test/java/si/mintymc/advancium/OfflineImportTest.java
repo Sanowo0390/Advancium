@@ -103,4 +103,25 @@ class OfflineImportTest {
             assertEquals(1, store.leaderboard(allowed).getFirst().done());
         }
     }
+    @Test void sharedDatabaseUnionsProgressWithoutDoubleCounting() throws Exception {
+        UUID id = UUID.randomUUID();
+        Set<String> first = Set.of("minecraft:story/mine_stone");
+        Set<String> second = Set.of("minecraft:story/iron_tools");
+        Set<String> allowed = Set.of("minecraft:story/mine_stone", "minecraft:story/iron_tools");
+        try (ProgressStore survival = open()) {
+            survival.replaceSnapshot(id, "SharedPlayer", first);
+        }
+        Path pluginDir = temp.resolve("plugin");
+        try (ProgressStore resource = new ProgressStore("sqlite", "resource", pluginDir,
+                "players.sqlite3", "localhost", 3306, "test", "test", "",
+                Logger.getLogger("AdvanciumTest"))) {
+            resource.open();
+            resource.replaceSnapshot(id, "SharedPlayer", second);
+            assertEquals(1, resource.leaderboard(allowed).size());
+            assertEquals(2, resource.leaderboard(allowed).getFirst().done());
+            resource.replaceSnapshot(id, "SharedPlayer", first);
+            assertEquals(1, resource.leaderboard(allowed).getFirst().done());
+        }
+    }
+
 }
