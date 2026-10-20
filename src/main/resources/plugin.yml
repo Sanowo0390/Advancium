@@ -1,5 +1,5 @@
 name: Advancium
-version: '1.0.3'
+version: '1.0.4'
 main: si.mintymc.advancium.Advancium
 api-version: '26.2'
 author: MintyMC
