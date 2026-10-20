@@ -38,7 +38,7 @@
 
 **v1.0.2から26.2にも対応：** `api-version` を26.2に合わせ、Paper 26.2の安定版APIでビルドしています。26.3でも同じJARを利用できる想定です。バージョンごとの進捗総数は自動取得されます。
 
-既存の1.0.1から更新する場合は、古いJARを削除して新しいJARを配置してください。既存の `plugins/Advancium/` 内の設定・データベースは維持されます。
+既存の1.0.1 / 1.0.2から更新する場合は、古いJARを削除してv1.0.3以降のJARを配置してください。既存の `plugins/Advancium/` 内の設定・データベースは維持されます。
 
 ## コマンド
 
@@ -48,7 +48,10 @@
 | `/adv <プレイヤー名>` | 指定プレイヤーの進捗を確認 | `advancium.use` |
 | `/adv top [ページ]` | ランキングを表示 | `advancium.use` |
 | `/adv reload` | 設定と集計対象の進捗を再読み込み | `advancium.admin` |
-| `/adv sync` | 保存済み進捗を再取り込み | `advancium.admin` |
+| `/adv sync` | 保存済み進捗を再取り込み（互換エイリアス） | `advancium.admin` |
+| `/advtop [ページ]` | オフラインを含むランキング | `advancium.use` |
+| `/advtop import` | 全対象ワールドの進捗JSONを非同期で読み込みDBへ取り込む | `advancium.admin` |
+| `/advtop refresh` | 全進捗JSONを再集計し、現在オンラインの進捗もDBへ反映 | `advancium.admin` |
 
 `advancium.use` は全員、`advancium.admin` は OP にデフォルトで付与されます。
 
@@ -99,6 +102,28 @@ Discord のチャンネル設定から Webhook URL を作成して設定しま�
 - 更新は短時間に何度も送らず、まとめて処理します。
 - 投稿先メッセージの ID は `plugins/Advancium/webhook-message-id.txt` に保存されます。
 - **Webhook URL は秘密情報です。** 設定済みの `config.yml` を公開リポジトリにコミットしないでください。
+
+### 過去のオフラインプレイヤーを一括取り込みする場合
+
+新規インストール時は `import.auto-on-start: true` により起動後自動で保存済み進捗を読み取ります。
+プレイヤーの再ログインは必要ありません。
+
+```yaml
+import:
+  auto-on-start: true
+  # 空なら現在読み込まれているBukkitワールドをすべて検索
+  # MultiVerse等で過去の保存データが別ワールドにある場合は指定
+  world-folders: [Seikatsu, Lobby]
+```
+
+- `/advtop import`：保存済みの全プレイヤーの進捗JSONを取り込み直します。既存のオンライン進捗は最後に上書き反映し、古いJSONで現在の進捗が巻き戻らないようにします。
+- `/advtop refresh`：進捗定義も再読み込みしてファイル・オンライン進捗を再集計します。
+- `world-folders` にはサーバールートからの相対パス（フォルダ名）を指定します。空配列なら起動時にBukkitが読み込んだワールドが対象です。起動後にロードされるワールド、読み込んでいない旧ワールドは明示指定してください。
+- 26.2の `players/advancements/<UUID>.json` と、旧バージョンの `advancements/<UUID>.json` に対応します。<escape></escape>
+- 同じUUIDのファイルが複数ある場合、同じワールドの新形式を優先し、それ以外はファイル更新時刻が新しいデータを優先します。統合によって進捗が失われないよう、重複をログに出します。
+- JSONの走査とSQLite/MariaDBへの書き込みは専用IOスレッドで処理されます（ワールド/APIの読み取りはメインスレッド）。多数の履歴プレイヤーがいる場合は完了通知まで時間がかかります。
+- DBに既にある履歴は残ります。**元のJSONが消失した場合、JSONにない進捗を復元することはできません。** Minecraftの実績データがデータベースに標準保存されるわけではありません。
+- 一度のインポートは指定バックエンドの `server-id` の進捗だけを書き換えます。共有MariaDBに格納済みの他バックエンドの進捗は上書きしません。
 
 ### 複数バックエンドでランキングを共有する場合
 

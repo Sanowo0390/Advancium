@@ -30,6 +30,13 @@ messages:
   # Discordへの個別通知は行いません。
   prefix: '&a[Advancium] &f'
 
+# Offline data import. If world-folders is empty, scan all Bukkit-loaded worlds.
+# For Multiverse, provide explicit world folder names to avoid importing obsolete worlds.
+# Paths are relative to the server root. Example: [Seikatsu] or [Lobby, Seikatsu].
+import:
+  auto-on-start: true
+  world-folders: []
+
 ranking:
   top-size: 10
   # 全データ再読込/他バックエンドの更新反映までの間隔（秒）
