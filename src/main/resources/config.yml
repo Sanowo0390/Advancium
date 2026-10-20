@@ -35,6 +35,10 @@ messages:
 # Paths are relative to the server root. Example: [Seikatsu] or [Lobby, Seikatsu].
 import:
   auto-on-start: true
+  # If world-folders is empty, also find old unloaded worlds beside server.properties.
+  # Direct children with level.dat or uid.dat are treated as worlds.
+  discover-unloaded-worlds: true
+  # If you specify worlds here, only those folders are scanned (no autodiscovery).
   world-folders: []
 
 ranking:
