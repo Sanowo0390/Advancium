@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "si.mintymc"
-version = "1.0.1"
+version = "1.0.2"
 
 repositories {
     mavenCentral()
@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.3.build.178-stable")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
     compileOnly("me.clip:placeholderapi:2.11.7")
 }
 

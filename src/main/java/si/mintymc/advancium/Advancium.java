@@ -110,7 +110,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
                     getConfig().getInt("webhook.top-size", 10), getConfig().getInt("webhook.color", 5763719),
                     getConfig().getInt("webhook.min-update-seconds", 30),
                     getConfig().getString("webhook.title", "🏆 MintyMC 実績ランキング"),
-                    getConfig().getString("webhook.footer", "Minecraft Java 26.3"));
+                    getConfig().getString("webhook.footer", "Minecraft Java 26.2+"));
             } catch (IllegalArgumentException e) {
                 webhook = null;
                 getLogger().warning("Webhookを無効にしました。HTTPSのDiscord Webhook URLを確認してください。");
@@ -133,7 +133,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         }
         advancements = List.copyOf(newList);
         allowedKeys = Set.copyOf(newKeys);
-        getLogger().info("集計対象の進捗: " + newList.size() + " 件（Minecraft 26.3向け自動取得）");
+        getLogger().info("集計対象の進捗: " + newList.size() + " 件（サーバー上の進捗から自動取得）");
     }
 
     int total() { return allowedKeys.size(); }

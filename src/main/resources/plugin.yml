@@ -1,7 +1,7 @@
 name: Advancium
-version: '1.0.1'
+version: '1.0.2'
 main: si.mintymc.advancium.Advancium
-api-version: '26.3'
+api-version: '26.2'
 author: MintyMC
 website: https://github.com/Sanowo0390/Advancium
 description: 実績解除率・サーバー別統合ランキング・Discord Webhookランキング

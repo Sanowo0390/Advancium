@@ -1,4 +1,4 @@
-# Minecraft 26.3 / Paper・Purpur
+# Minecraft 26.2 / 26.3 / Paper・Purpur
 # minecraft名前空間の表示可能な進捗だけを標準で集計します。
 # 進捗数はサーバーから自動取得（固定の126個には依存しません）。
 advancements:
@@ -47,5 +47,5 @@ webhook:
   periodic-seconds: 300
   top-size: 10
   title: '🏆 MintyMC 実績ランキング'
-  footer: 'Minecraft Java 26.3'
+  footer: 'Minecraft Java 26.2+'
   color: 5763719
