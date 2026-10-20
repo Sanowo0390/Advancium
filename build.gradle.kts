@@ -15,6 +15,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
     compileOnly("me.clip:placeholderapi:2.11.7")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.12.2")
     testRuntimeOnly("org.xerial:sqlite-jdbc:3.50.3.0")
 }
 
