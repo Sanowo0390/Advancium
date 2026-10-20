@@ -124,4 +124,76 @@ class OfflineImportTest {
         }
     }
 
+    @Test void historicalPlayersWithoutAdvancementFilesAppearAtZeroPercent() throws Exception {
+        UUID withData = UUID.randomUUID();
+        UUID withStats = UUID.randomUUID();
+        UUID withLegacyData = UUID.randomUUID();
+        Path world = temp.resolve("OldWorld");
+        Path modern = Files.createDirectories(world.resolve("players/data"));
+        Path stats = Files.createDirectories(world.resolve("players/stats"));
+        Path legacy = Files.createDirectories(world.resolve("playerdata"));
+        Files.write(modern.resolve(withData + ".dat"), new byte[] {1, 2, 3});
+        Files.writeString(stats.resolve(withStats + ".json"), "{}");
+        Files.write(legacy.resolve(withLegacyData + ".dat_old"), new byte[] {1});
+        try (ProgressStore store = open()) {
+            Set<String> allowed = Set.of("minecraft:story/mine_stone");
+            ProgressStore.ImportStats statsResult = ProgressStore.importAdvancementFiles(
+                    List.of(world),
+                    Map.of(withData, "OldPlayer", withStats, "StatsOnly", withLegacyData, "LegacyPlayer"),
+                    store, allowed);
+            assertEquals(3, statsResult.participants());
+            assertEquals(3, statsResult.withoutAdvancements());
+            assertEquals(0, statsResult.imported());
+            assertEquals(3, store.leaderboard(allowed).size());
+            assertTrue(store.leaderboard(allowed).stream().allMatch(row -> row.done() == 0));
+            assertTrue(store.leaderboard(allowed).stream().anyMatch(row -> row.name().equals("OldPlayer")));
+        }
+    }
+
+    @Test void historicalZeroPercentImportNeverErasesStoredProgress() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        Path world = temp.resolve("OldWorld");
+        Path dir = Files.createDirectories(world.resolve("playerdata"));
+        Files.write(dir.resolve(uuid + ".dat"), new byte[] {0});
+        try (ProgressStore store = open()) {
+            Set<String> allowed = Set.of("minecraft:story/mine_stone");
+            store.replaceSnapshot(uuid, "BeforeInstall", allowed);
+            ProgressStore.importAdvancementFiles(List.of(world), Map.of(), store, allowed);
+            assertEquals(1, store.leaderboard(allowed).getFirst().done());
+            assertEquals("BeforeInstall", store.leaderboard(allowed).getFirst().name());
+        }
+    }
+
+    @Test void discoversUnloadedWorldsWithoutScanningBackupTrees() throws Exception {
+        Path base = temp.resolve("server");
+        Path loaded = Files.createDirectories(base.resolve("Lobby"));
+        Path old = Files.createDirectories(base.resolve("Seikatsu"));
+        Path backup = Files.createDirectories(base.resolve("backups/Seikatsu"));
+        Files.write(old.resolve("level.dat"), new byte[] {42});
+        Files.write(backup.resolve("level.dat"), new byte[] {42});
+        List<Path> discovered = ProgressStore.discoverWorldFolders(base, List.of(loaded),
+                true, Logger.getLogger("AdvanciumTest"));
+        assertTrue(discovered.contains(loaded));
+        assertTrue(discovered.contains(old));
+        assertFalse(discovered.contains(backup));
+        List<Path> manual = ProgressStore.discoverWorldFolders(base, List.of(loaded),
+                false, Logger.getLogger("AdvanciumTest"));
+        assertEquals(List.of(loaded), manual);
+    }
+
+    @Test void loadNamesFromUsercacheAndWhitelist() throws Exception {
+        Path base = Files.createDirectories(temp.resolve("server"));
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        Files.writeString(base.resolve("whitelist.json"), """
+                [{"uuid":"%s","name":"WhitelistPlayer"}]
+                """.formatted(first));
+        Files.writeString(base.resolve("usercache.json"), """
+                [{"uuid":"%s","name":"CurrentName"},{"uuid":"%s","name":"OldPlayer"}]
+                """.formatted(first, second));
+        Map<UUID, String> names = ProgressStore.loadNameCache(base);
+        assertEquals("CurrentName", names.get(first));
+        assertEquals("OldPlayer", names.get(second));
+    }
+
 }

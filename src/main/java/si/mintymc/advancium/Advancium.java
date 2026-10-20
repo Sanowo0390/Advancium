@@ -42,6 +42,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
     private String prefix;
     private List<Path> worldFolders = List.of();
     private volatile List<Path> importFolders = List.of();
+    private volatile boolean discoverUnloadedWorlds = true;
     private Path serverRoot;
     private record PlayerSnapshot(UUID uuid, String name, Set<String> keys) {}
 
@@ -229,6 +230,8 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         worldFolders = Bukkit.getWorlds().stream()
                 .map(w -> w.getWorldFolder().toPath().toAbsolutePath().normalize()).toList();
         List<String> configured = getConfig().getStringList("import.world-folders");
+        discoverUnloadedWorlds = getConfig().getBoolean("import.discover-unloaded-worlds", true)
+                && configured.isEmpty();
         if (configured.isEmpty()) {
             importFolders = List.copyOf(worldFolders);
             return;
@@ -256,11 +259,15 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
 
     private ProgressStore.ImportStats importOffline() {
         Map<UUID, String> names = ProgressStore.loadNameCache(serverRoot);
-        ProgressStore.ImportStats stats = ProgressStore.importAdvancementFiles(importFolders, names, store, allowedKeys);
+        List<Path> folders = ProgressStore.discoverWorldFolders(serverRoot, importFolders,
+                discoverUnloadedWorlds, getLogger());
+        ProgressStore.ImportStats stats = ProgressStore.importAdvancementFiles(folders, names, store, allowedKeys);
         if (stats.duplicates() > 0) getLogger().warning(
                 "同一UUIDの進捗ファイルを " + stats.duplicates() + " 件重複検出しました。最新の保存データを優先しています。");
-        getLogger().info("保存済み進捗: " + stats.imported() + "/" + stats.filesFound()
-                + " ファイル取り込み (失敗=" + stats.failed() + ")");
+        getLogger().info("過去プレイヤー検索: " + stats.worldsScanned() + "ワールド, "
+                + stats.participants() + "人発見（進捗なし=" + stats.withoutAdvancements()
+                + "人）, 進捗JSON=" + stats.imported() + "/" + stats.filesFound()
+                + " 件取り込み (失敗=" + stats.failed() + ")");
         return stats;
     }
 
@@ -289,10 +296,12 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
             refreshBoard(true);
             int finalOnlineSaved = onlineSaved;
             int finalOnlineFailed = onlineFailed;
-            runMain(() -> sender.sendMessage(prefix + "取込完了: " + stats.imported()
-                    + "人 (検出ファイル=" + stats.filesFound() + ", 重複=" + stats.duplicates()
-                    + ", エラー=" + stats.failed() + "), オンライン同期=" + finalOnlineSaved
-                    + "人 (エラー=" + finalOnlineFailed + ")。/advtop で確認できます。"));
+            runMain(() -> sender.sendMessage(prefix + "過去プレイヤー " + stats.participants()
+                    + " 人を発見 (" + stats.worldsScanned() + " ワールド, 進捗JSONなし="
+                    + stats.withoutAdvancements() + " 人), 進捗JSON読み込み成功=" + stats.imported()
+                    + " 件 (重複=" + stats.duplicates() + ", 失敗=" + stats.failed()
+                    + "), オンライン同期=" + finalOnlineSaved + " 人 (失敗=" + finalOnlineFailed
+                    + ")。/advtop で確認してください。"));
         });
     }
 
