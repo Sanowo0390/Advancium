@@ -224,6 +224,8 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
 
     /** Resolve configured roots on the Bukkit thread; filesystem traversal happens on the IO worker. */
     private void updateImportFolders() {
+        worldFolders = Bukkit.getWorlds().stream()
+                .map(w -> w.getWorldFolder().toPath().toAbsolutePath().normalize()).toList();
         List<String> configured = getConfig().getStringList("import.world-folders");
         if (configured.isEmpty()) {
             importFolders = List.copyOf(worldFolders);
@@ -262,6 +264,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
 
     /** Capture Bukkit state on main thread, then import/merge safely on the DB executor. */
     private void reimport(CommandSender sender, boolean refresh) {
+        updateImportFolders();
         if (refresh) refreshRegistry();
         List<PlayerSnapshot> live = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
