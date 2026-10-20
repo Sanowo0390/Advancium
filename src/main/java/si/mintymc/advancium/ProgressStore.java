@@ -156,7 +156,10 @@ final class ProgressStore implements AutoCloseable {
                             // within the same world (such as after a version upgrade).
                             boolean currentModern = relative.equals("players/advancements");
                             boolean previousModern = previous.getParent().endsWith(Paths.get("players", "advancements"));
-                            if (currentModern != previousModern && previous.getParent().getParent().equals(file.getParent().getParent().getParent())) {
+                            Path previousRoot = previousModern
+                                    ? previous.getParent().getParent().getParent()
+                                    : previous.getParent().getParent();
+                            if (currentModern != previousModern && previousRoot.equals(root.toAbsolutePath().normalize())) {
                                 if (currentModern) chosen.put(uuid, file);
                             } else if (Files.getLastModifiedTime(file).toMillis() > Files.getLastModifiedTime(previous).toMillis()) {
                                 chosen.put(uuid, file);
