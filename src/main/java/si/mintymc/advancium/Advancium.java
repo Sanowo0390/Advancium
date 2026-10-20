@@ -41,14 +41,18 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
     private volatile WebhookBoard webhook;
     private String prefix;
     private List<Path> worldFolders = List.of();
+    private volatile List<Path> importFolders = List.of();
     private Path serverRoot;
+    private record PlayerSnapshot(UUID uuid, String name, Set<String> keys) {}
 
     @Override public void onEnable() {
         saveDefaultConfig();
         reloadPresentation();
         refreshRegistry();
         serverRoot = Bukkit.getWorldContainer().toPath();
-        worldFolders = Bukkit.getWorlds().stream().map(w -> w.getWorldFolder().toPath()).toList();
+        worldFolders = Bukkit.getWorlds().stream().map(w -> w.getWorldFolder().toPath().toAbsolutePath().normalize()).toList();
+        updateImportFolders();
+        boolean autoImport = getConfig().getBoolean("import.auto-on-start", true);
         Bukkit.getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("adv")).setExecutor(this);
         Objects.requireNonNull(getCommand("adv")).setTabCompleter(this);
@@ -72,7 +76,7 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
             try {
                 store.open();
                 ready = true;
-                importOffline();
+                if (autoImport) importOffline();
                 runMain(() -> {
                     for (Player player : Bukkit.getOnlinePlayers()) schedulePlayerSync(player, false);
                 });
@@ -218,17 +222,73 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         } catch (Exception e) { getLogger().warning("ランキング集計失敗: " + e.getClass().getSimpleName()); }
     }
 
-    private void importOffline() {
-        try {
-            Map<UUID, String> names = ProgressStore.loadNameCache(serverRoot);
-            int imported = 0;
-            // Minecraft stores player advancements in its primary world. Import only one directory
-            // so another Multiverse world cannot overwrite the same UUID with stale data.
-            if (!worldFolders.isEmpty()) {
-                imported += ProgressStore.importAdvancementFiles(worldFolders.get(0), names, store, allowedKeys);
+    /** Resolve configured roots on the Bukkit thread; filesystem traversal happens on the IO worker. */
+    private void updateImportFolders() {
+        List<String> configured = getConfig().getStringList("import.world-folders");
+        if (configured.isEmpty()) {
+            importFolders = List.copyOf(worldFolders);
+            return;
+        }
+        Path base = serverRoot.toAbsolutePath().normalize();
+        Set<Path> roots = new LinkedHashSet<>();
+        for (String value : configured) {
+            if (value.isBlank()) continue;
+            Path supplied;
+            try {
+                supplied = Path.of(value);
+            } catch (java.nio.file.InvalidPathException ex) {
+                getLogger().warning("import.world-folders に無効なパスがあります: " + value);
+                continue;
             }
-            getLogger().info("保存済み進捗を " + imported + " ファイル取り込みました。");
-        } catch (Exception e) { getLogger().warning("オフライン進捗の一括取込失敗: " + e.getClass().getSimpleName()); }
+            Path resolved = (supplied.isAbsolute() ? supplied : base.resolve(supplied)).toAbsolutePath().normalize();
+            if (!resolved.startsWith(base)) {
+                getLogger().warning("サーバールート外の進捗パスを拒否しました: " + value);
+                continue;
+            }
+            roots.add(resolved);
+        }
+        importFolders = List.copyOf(roots);
+    }
+
+    private ProgressStore.ImportStats importOffline() {
+        Map<UUID, String> names = ProgressStore.loadNameCache(serverRoot);
+        ProgressStore.ImportStats stats = ProgressStore.importAdvancementFiles(importFolders, names, store, allowedKeys);
+        if (stats.duplicates() > 0) getLogger().warning(
+                "同一UUIDの進捗ファイルを " + stats.duplicates() + " 件重複検出しました。最新の保存データを優先しています。");
+        getLogger().info("保存済み進捗: " + stats.imported() + "/" + stats.filesFound()
+                + " ファイル取り込み (失敗=" + stats.failed() + ")");
+        return stats;
+    }
+
+    /** Capture Bukkit state on main thread, then import/merge safely on the DB executor. */
+    private void reimport(CommandSender sender, boolean refresh) {
+        if (refresh) refreshRegistry();
+        List<PlayerSnapshot> live = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            live.add(new PlayerSnapshot(player.getUniqueId(), player.getName(), Set.copyOf(currentKeys(player))));
+        }
+        sender.sendMessage(prefix + "保存済み進捗の再集計を開始しました（非同期処理）。");
+        executeIo(() -> {
+            ProgressStore.ImportStats stats = importOffline();
+            int onlineSaved = 0;
+            int onlineFailed = 0;
+            for (PlayerSnapshot snapshot : live) {
+                try {
+                    store.replaceSnapshot(snapshot.uuid(), snapshot.name(), snapshot.keys());
+                    onlineSaved++;
+                } catch (Exception ex) {
+                    onlineFailed++;
+                    getLogger().warning("オンライン進捗保存失敗: " + ex.getClass().getSimpleName());
+                }
+            }
+            refreshBoard(true);
+            int finalOnlineSaved = onlineSaved;
+            int finalOnlineFailed = onlineFailed;
+            runMain(() -> sender.sendMessage(prefix + "取込完了: " + stats.imported()
+                    + "人 (検出ファイル=" + stats.filesFound() + ", 重複=" + stats.duplicates()
+                    + ", エラー=" + stats.failed() + "), オンライン同期=" + finalOnlineSaved
+                    + "人 (エラー=" + finalOnlineFailed + ")。/advtop で確認できます。"));
+        });
     }
 
     private void executeIo(Runnable task) {
@@ -251,44 +311,69 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         sendSnapshot(player.getUniqueId(), player.getName(), currentKeys(player));
     }
 
+    private boolean showTop(CommandSender sender, String requestedPage) {
+        int page = 1;
+        if (requestedPage != null) {
+            try { page = Integer.parseInt(requestedPage); } catch (NumberFormatException ignored) { }
+        }
+        int size = Math.max(1, Math.min(20, getConfig().getInt("ranking.top-size", 10)));
+        List<ProgressStore.Record> rows = leaderboard;
+        int pages = Math.max(1, (rows.size() + size - 1) / size);
+        if (page < 1 || page > pages) {
+            sender.sendMessage(prefix + "ページは1〜" + pages + "です。");
+            return true;
+        }
+        sender.sendMessage(ChatColor.GOLD + "━━ MintyMC 実績ランキング " + page + "/" + pages + " ━━");
+        for (int i = (page - 1) * size; i < Math.min(rows.size(), page * size); i++) {
+            ProgressStore.Record r = rows.get(i);
+            sender.sendMessage(ChatColor.YELLOW + "#" + (i + 1) + " " + ChatColor.WHITE + r.name()
+                    + ChatColor.GRAY + " - " + r.done() + "/" + total() + " (" + percent(r.done()) + "%)");
+        }
+        if (rows.isEmpty()) sender.sendMessage(ChatColor.GRAY + "登録されたプレイヤーがいません。");
+        return true;
+    }
+
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!ready) { sender.sendMessage(prefix + ChatColor.RED + "データベース初期化中です。"); return true; }
-        if (args.length > 0 && (args[0].equalsIgnoreCase("reload") || args[0].equalsIgnoreCase("sync"))) {
-            if (!sender.hasPermission("advancium.admin")) { sender.sendMessage(ChatColor.RED + "権限がありません。"); return true; }
-            if (args[0].equalsIgnoreCase("reload")) {
-                reloadConfig(); reloadPresentation(); refreshRegistry();
+        if (!ready) {
+            sender.sendMessage(prefix + ChatColor.RED + "データベース初期化中です。");
+            return true;
+        }
+        boolean topAlias = command.getName().equalsIgnoreCase("advtop");
+        String action = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : "";
+        if (topAlias && !action.equals("import") && !action.equals("refresh")) {
+            String page = action.equals("top") ? (args.length > 1 ? args[1] : null)
+                    : (args.length > 0 ? args[0] : null);
+            return showTop(sender, page);
+        }
+        if (action.equals("reload") || action.equals("sync")
+                || action.equals("import") || action.equals("refresh")) {
+            if (!sender.hasPermission("advancium.admin")) {
+                sender.sendMessage(ChatColor.RED + "権限がありません。");
+                return true;
+            }
+            if (action.equals("reload")) {
+                reloadConfig();
+                reloadPresentation();
+                refreshRegistry();
+                updateImportFolders();
                 sender.sendMessage(prefix + "設定を再読込しました（DB設定・server-id変更は再起動が必要）。対象進捗: " + total());
                 executeIo(() -> refreshBoard(true));
             } else {
-                sender.sendMessage(prefix + "オフライン進捗を取り込み直します。");
-                executeIo(() -> { importOffline(); refreshBoard(true); });
-                for (Player p : Bukkit.getOnlinePlayers()) schedulePlayerSync(p, false);
+                // Legacy /adv sync remains supported; /advtop import and refresh use the same database.
+                reimport(sender, action.equals("refresh"));
             }
             return true;
         }
-        if (args.length > 0 && args[0].equalsIgnoreCase("top")) {
-            int page = 1;
-            if (args.length > 1) {
-                try { page = Integer.parseInt(args[1]); } catch (NumberFormatException ignored) { }
-            }
-            int size = Math.max(1, Math.min(20, getConfig().getInt("ranking.top-size", 10)));
-            List<ProgressStore.Record> rows = leaderboard;
-            int pages = Math.max(1, (rows.size() + size - 1) / size);
-            if (page < 1 || page > pages) { sender.sendMessage(prefix + "ページは1〜" + pages + "です。"); return true; }
-            sender.sendMessage(ChatColor.GOLD + "━━ MintyMC 実績ランキング " + page + "/" + pages + " ━━");
-            for (int i = (page - 1) * size; i < Math.min(rows.size(), page * size); i++) {
-                ProgressStore.Record r = rows.get(i);
-                sender.sendMessage(ChatColor.YELLOW + "#" + (i + 1) + " " + ChatColor.WHITE + r.name()
-                        + ChatColor.GRAY + " - " + r.done() + "/" + total() + " (" + percent(r.done()) + "%)");
-            }
-            if (rows.isEmpty()) sender.sendMessage(ChatColor.GRAY + "登録されたプレイヤーがいません。");
-            return true;
-        }
+        if (action.equals("top")) return showTop(sender, args.length > 1 ? args[1] : null);
+
         UUID uuid;
         String name;
         Player online = null;
         if (args.length == 0) {
-            if (!(sender instanceof Player p)) { sender.sendMessage(prefix + "使い方: /adv <プレイヤー|top>"); return true; }
+            if (!(sender instanceof Player p)) {
+                sender.sendMessage(prefix + "使い方: /adv <プレイヤー|top>");
+                return true;
+            }
             online = p; uuid = p.getUniqueId(); name = p.getName();
         } else {
             name = args[0];
@@ -296,24 +381,36 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
             if (online != null) { uuid = online.getUniqueId(); name = online.getName(); }
             else {
                 String requestedName = name;
-                Optional<ProgressStore.Record> found = leaderboard.stream().filter(r -> r.name().equalsIgnoreCase(requestedName)).findFirst();
-                if (found.isEmpty()) { sender.sendMessage(prefix + "プレイヤーが見つかりません: " + name); return true; }
+                Optional<ProgressStore.Record> found = leaderboard.stream()
+                        .filter(r -> r.name().equalsIgnoreCase(requestedName)).findFirst();
+                if (found.isEmpty()) {
+                    sender.sendMessage(prefix + "プレイヤーが見つかりません: " + name);
+                    return true;
+                }
                 uuid = found.get().uuid(); name = found.get().name();
             }
         }
-        int done = online != null ? currentKeys(online).size() : Optional.ofNullable(byUuid.get(uuid)).map(ProgressStore.Record::done).orElse(0);
+        int done = online != null ? currentKeys(online).size()
+                : Optional.ofNullable(byUuid.get(uuid)).map(ProgressStore.Record::done).orElse(0);
         int rank = position(uuid);
         sender.sendMessage(prefix + ChatColor.AQUA + name + ChatColor.WHITE + " の実績: " + done + "/" + total()
-                + ChatColor.YELLOW + " (" + percent(done) + "%)" + ChatColor.GRAY + " / 順位: " + (rank == 0 ? "集計待ち" : rank + "位"));
+                + ChatColor.YELLOW + " (" + percent(done) + "%)" + ChatColor.GRAY
+                + " / 順位: " + (rank == 0 ? "集計待ち" : rank + "位"));
         return true;
     }
 
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        boolean topAlias = command.getName().equalsIgnoreCase("advtop");
         if (args.length == 1) {
-            List<String> candidates = new ArrayList<>(List.of("top"));
-            if (sender.hasPermission("advancium.admin")) candidates.addAll(List.of("reload", "sync"));
-            for (ProgressStore.Record r : leaderboard) candidates.add(r.name());
-            return candidates.stream().filter(s -> s.toLowerCase(Locale.ROOT).startsWith(args[0].toLowerCase(Locale.ROOT))).limit(100).toList();
+            List<String> candidates = new ArrayList<>(topAlias ? List.of("1", "2", "3")
+                    : List.of("top"));
+            if (sender.hasPermission("advancium.admin")) {
+                candidates.addAll(topAlias ? List.of("import", "refresh")
+                        : List.of("reload", "sync", "import", "refresh"));
+            }
+            if (!topAlias) for (ProgressStore.Record r : leaderboard) candidates.add(r.name());
+            return candidates.stream().filter(name -> name.toLowerCase(Locale.ROOT)
+                    .startsWith(args[0].toLowerCase(Locale.ROOT))).distinct().limit(100).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("top")) return List.of("1", "2", "3");
         return List.of();
