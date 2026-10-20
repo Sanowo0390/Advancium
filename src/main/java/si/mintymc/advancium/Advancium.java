@@ -56,6 +56,8 @@ public final class Advancium extends JavaPlugin implements Listener, CommandExec
         Bukkit.getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("adv")).setExecutor(this);
         Objects.requireNonNull(getCommand("adv")).setTabCompleter(this);
+        Objects.requireNonNull(getCommand("advtop")).setExecutor(this);
+        Objects.requireNonNull(getCommand("advtop")).setTabCompleter(this);
         try {
             String serverId = getConfig().getString("server-id", "survival");
             if (!serverId.matches("[A-Za-z0-9_-]{1,80}")) throw new IllegalArgumentException("server-id must contain 1-80 safe characters");
